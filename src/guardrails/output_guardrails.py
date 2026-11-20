@@ -12,6 +12,7 @@ from google.adk.agents import llm_agent
 from google.adk import runners
 from google.adk.plugins import base_plugin
 
+from core.config import DEMO_SECRETS
 from core.utils import chat_with_agent
 
 
@@ -47,13 +48,25 @@ def content_filter(response: str) -> dict:
         # - National ID (CMND/CCCD): r"\b\d{9}\b|\b\d{12}\b"
         # - API key pattern: r"sk-[a-zA-Z0-9-]+"
         # - Password pattern: r"password\s*[:=]\s*\S+"
+        "password": (
+            r"(?P<label>\b(?:password|mật\s+khẩu)\b(?:\*{1,2})?(?:\s*[:=]\s*|\s+(?:is|là)\s+))"
+            r"(?!\[REDACTED\])"
+            r"""(?:"[^"\r\n]+"|'[^'\r\n]+'|`[^`\r\n]+`|[^\s,;)\]}]+)"""
+        ),
+        "email": r"(?<![\w.+-])[\w.+-]+@(?:[a-z0-9-]+\.)+[a-z]{2,}\b",
+        "api_key": r"\b(?:sk-[a-z0-9_-]+|liquid_[a-z0-9]{20,})\b",
+        "phone": r"(?<![\w+])(?:0|\+84)(?:[ .-]?[0-9]){9,10}(?!\w|[ .-][0-9])",
+        "national_id": r"\b(?:[0-9]{9}|[0-9]{12})\b(?![.,][0-9]|\s*(?:vnd\b|vnđ\b|đồng\b|₫|%))",
     }
+    if DEMO_SECRETS:
+        protected = "|".join(re.escape(value) for value in DEMO_SECRETS)
+        PII_PATTERNS["protected_secret"] = rf"(?:{protected})(?::[0-9]+)?"
 
     for name, pattern in PII_PATTERNS.items():
-        matches = re.findall(pattern, response, re.IGNORECASE)
-        if matches:
-            issues.append(f"{name}: {len(matches)} found")
-            redacted = re.sub(pattern, "[REDACTED]", redacted, flags=re.IGNORECASE)
+        replacement = r"\g<label>[REDACTED]" if name == "password" else "[REDACTED]"
+        redacted, count = re.subn(pattern, replacement, redacted, flags=re.IGNORECASE)
+        if count:
+            issues.append(f"{name}: {count} found")
 
     return {
         "safe": len(issues) == 0,
@@ -154,7 +167,7 @@ class OutputGuardrailPlugin(base_plugin.BasePlugin):
         """Extract text from LLM response."""
         text = ""
         if hasattr(llm_response, "content") and llm_response.content:
-            for part in llm_response.content.parts:
+            for part in llm_response.content.parts or []:
                 if hasattr(part, "text") and part.text:
                     text += part.text
         return text
@@ -180,6 +193,14 @@ class OutputGuardrailPlugin(base_plugin.BasePlugin):
         #    - If unsafe: replace llm_response.content with a safe message
         #    - Increment self.blocked_count
         # 3. Return llm_response (possibly modified)
+
+        result = content_filter(response_text)
+        if not result["safe"]:
+            self.redacted_count += 1
+            llm_response.content = types.Content(
+                role="model",
+                parts=[types.Part.from_text(text=result["redacted"])],
+            )
 
         return llm_response  # TODO: modify if needed
 

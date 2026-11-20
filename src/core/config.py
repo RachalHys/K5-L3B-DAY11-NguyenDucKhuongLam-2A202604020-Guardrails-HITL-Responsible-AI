@@ -33,12 +33,15 @@ except ImportError:
 PROVIDER_OPENAI = "openai"
 PROVIDER_GEMINI = "gemini"
 PROVIDER_OPENROUTER = "openrouter"
+PROVIDER_LIQUID = "liquid"
 
 # --- Blue Team (LOCKED) ---
 BLUE_PROVIDER = PROVIDER_OPENROUTER
 BLUE_MODEL = "liquid/lfm-3-1.7b:free"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENROUTER_MODEL = BLUE_MODEL  # alias
+LIQUID_MODEL = "lfm3-1.7b"
+LIQUID_BASE_URL = "https://api.liquid.ai/openai/v1"
 
 # --- Red Team ---
 DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
@@ -99,11 +102,17 @@ except FileNotFoundError:
 # Blue Team — fixed OpenRouter Liquid
 # ---------------------------------------------------------------------------
 
+def _blue_base_url() -> str:
+    return os.environ.get("OPENROUTER_BASE_URL", "").strip() or OPENROUTER_BASE_URL
+
+
 def get_blue_provider() -> str:
-    return BLUE_PROVIDER
+    return PROVIDER_LIQUID if _blue_base_url().rstrip("/") == LIQUID_BASE_URL else BLUE_PROVIDER
 
 
 def get_blue_model() -> str:
+    if get_blue_provider() == PROVIDER_LIQUID:
+        return LIQUID_MODEL
     # Hard-locked; env cannot override for the graded Blue Team path.
     return BLUE_MODEL
 
@@ -112,14 +121,15 @@ def get_openrouter_api_key() -> str:
     return os.environ.get("OPENROUTER_API_KEY", "").strip()
 
 
+def _blue_api_key_name() -> str:
+    return "LIQUID_API_KEY" if get_blue_provider() == PROVIDER_LIQUID else "OPENROUTER_API_KEY"
+
+
 def blue_client_kwargs() -> dict:
-    """OpenAI SDK kwargs pointing at OpenRouter (Blue Team only)."""
+    """OpenAI SDK kwargs for the Blue endpoint."""
     return {
-        "api_key": get_openrouter_api_key() or None,
-        "base_url": (
-            os.environ.get("OPENROUTER_BASE_URL", OPENROUTER_BASE_URL).strip()
-            or OPENROUTER_BASE_URL
-        ),
+        "api_key": os.environ.get(_blue_api_key_name(), "").strip() or None,
+        "base_url": _blue_base_url(),
     }
 
 
@@ -236,10 +246,9 @@ def is_harder_model() -> bool:
 
 def setup_api_key():
     """Ensure keys for Blue (OpenRouter) + Red / Red Advance (OpenAI or Gemini)."""
-    if not get_openrouter_api_key():
-        os.environ["OPENROUTER_API_KEY"] = input(
-            "Enter OpenRouter API Key (Blue): "
-        ).strip()
+    key_name = _blue_api_key_name()
+    if not os.environ.get(key_name, "").strip():
+        os.environ[key_name] = input(f"Enter {key_name} (Blue): ").strip()
     print(f"Blue  — {blue_provider_label()}  [LOCKED]")
 
     red = get_red_provider()
