@@ -76,8 +76,7 @@ def detect_injection(user_input: str) -> InputStatus:
         # r"ignore (all )?(previous|above) instructions",
         r"\b(?:ignore|disregard|forget|override) (?:all )?(?:your |the )?"
         r"(?:(?:previous|above|prior|earlier|system) )?(?:instructions?|rules?|directives?|prompts?)\b",
-        r"\byou are now (?:an? |the )?(?:dan|unrestricted|unfiltered|jailbroken|admin(?:istrator)?|"
-        r"developer|auditor|assistant|(?:bank )?(?:staff|employee)|in developer mode)\b",
+        r"\byou are now\b",
         r"\b(?:system|developer) (?:prompts?|instructions?)\b",
         r"\b(?:reveal|disclose|print|repeat) (?:your |the )?(?:instructions?|prompts?|secrets?|credentials?)\b",
         r"\b(?:show|reveal|disclose|give) (?:me )?(?:your |the )?"
